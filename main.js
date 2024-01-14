@@ -1,6 +1,11 @@
 import ReactDom from './core/ReactDom.js'
-import App from './App.js'
+import App from './App.jsx'
 
-ReactDom.createRoot(document.getElementById("root")).render(App)
+
+
+const app = App()
+console.log(App, app);
+
+ReactDom.createRoot(document.getElementById("root")).render(app)
 
 
