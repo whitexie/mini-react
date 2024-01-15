@@ -43,7 +43,8 @@ function createElement(type: VDomType, props: Partial<Props>, ...children: (VDom
     props: {
       ...props,
       children: children.map(child => {
-        return typeof child === 'string' ? createTextNode(child) : child
+        const isTextNode = ['number', 'string'].includes(typeof child)
+        return isTextNode ? createTextNode(child as string) : child
       }),
     }
   }
@@ -60,15 +61,17 @@ function createTextNode(text: string) {
   }
 }
 
-function createLinkNode(vdom: VDom, option: Partial<LinkNode>): LinkNode {
-  return { dom: null, parent: null, sibling: null, child: null, ...vdom, ...option }
+function createLinkNode(vdom: VDom, parent: LinkNode): LinkNode {
+  const node: LinkNode = { dom: null, sibling: null, child: null, ...vdom, parent }
+
+  return node
 }
 
 export function initChidren(fiber: LinkNode, children: VDom[]) {
 
   let preChild: LinkNode | null = null;
   children.forEach((child, index) => {
-    const newFiber = createLinkNode(child, { parent: fiber })
+    const newFiber = createLinkNode(child, fiber)
 
     if (index === 0) {
       fiber.child = newFiber
@@ -94,7 +97,10 @@ function performUnitOfWork(fiber: LinkNode | null) {
 
   let children = fiber.props.children
 
-  children = isFunctionComponent ? [(fiber.type as Function)()] : fiber.props.children
+  if (isFunctionComponent) {
+    children = [(fiber.type as Function).call(fiber, fiber.props)]
+  }
+
   initChidren(fiber, children)
 
   // 返回下一个执行的fieber
@@ -106,8 +112,13 @@ function performUnitOfWork(fiber: LinkNode | null) {
     return fiber.sibling
   }
 
+
   if (fiber.parent) {
-    return fiber.parent?.sibling
+    let parent = fiber.parent
+    while (!parent?.sibling && parent.parent) {
+      parent = parent.parent
+    }
+    return parent.sibling
   }
 
   return null
@@ -115,20 +126,25 @@ function performUnitOfWork(fiber: LinkNode | null) {
 
 
 function commitNode(fiber: LinkNode) {
+  if(!fiber) return
+
   if (fiber.dom && fiber.parent) {
     let parent = fiber.parent
-    while(!parent.dom && parent.parent) {
+    while (!parent.dom && parent.parent) {
       parent = parent.parent
     }
     (parent.dom as HTMLElement).append(fiber.dom)
   }
+
   if (fiber.child) {
     commitNode(fiber.child)
   }
-  else if (fiber.sibling) {
-    commitNode(fiber.sibling)
+
+  let parent = fiber
+  while (!parent.sibling && parent.parent) {
+    parent = parent.parent
   }
-  // const children = fiber.children
+  commitNode(parent.sibling as LinkNode)
 }
 
 const workLoop: IdleRequestCallback = (deadline) => {
