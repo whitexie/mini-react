@@ -33,6 +33,7 @@ describe('createElement', () => {
     const dom = React.createElement('div', { id: 'id' }, {
       type: 'a', props: {
         'href': 'https://www.baidu.com',
+        children: []
       }
     }, 'hhhhh')
 
@@ -62,7 +63,7 @@ describe('createElement', () => {
   })
 
   it('子节点是文本内容时', () => {
-    const dom = React.createElement('div', null, 'hhhhh');
+    const dom = React.createElement('div', {}, 'hhhhh');
 
     expect(dom).toMatchInlineSnapshot(`
       {
