@@ -1,10 +1,15 @@
+type HTMLTagName = keyof HTMLElementTagNameMap
 
-type VDomType = keyof HTMLElementTagNameMap | 'TEXT_ELEMENT'
+type VDomType = HTMLTagName | 'TEXT_ELEMENT' | FunctionComponent
+
+type Props = Record<PropertyKey, any> & { children: Array<VDom | FunctionComponent> };
 
 export interface VDom {
   type: VDomType
-  props: Record<string, any>
+  props: Props
 }
+
+type FunctionComponent = () => VDom
 
 interface LinkNode extends VDom {
   dom: null | HTMLElement | Text
@@ -21,19 +26,18 @@ function createDom(el: VDom): HTMLElement | Text {
     return document.createTextNode(el.props.nodeValue)
   }
 
-  const dom = document.createElement(el.type)
+  const dom = document.createElement(el.type as HTMLTagName)
   const props = el.props
   Object.keys(props).forEach(key => {
     if (key !== 'children') {
-      dom.setAttribute(key, props[key])
-      // dom[key] = props[key]
+      dom[key] = props[key]
     }
   })
 
   return dom
 }
 
-function createElement(type: VDomType, props: Record<string, any>, ...children: VDom[]) {
+function createElement(type: VDomType, props: Props, ...children: VDom[]) {
   return {
     type,
     props: {
@@ -56,6 +60,20 @@ function createTextNode(text: string) {
   }
 }
 
+function initChidren(child: VDom | FunctionComponent, fiber: LinkNode) {
+  const newFiber: LinkNode = {
+    dom: null,
+    type: child.type,
+    props: child.props,
+    child: null,
+    sibling: null,
+    parent: fiber,
+  }
+
+  return newFiber
+
+}
+
 function performUnitOfWork(fiber: LinkNode | null) {
   if (!fiber) {
     return null
@@ -63,24 +81,17 @@ function performUnitOfWork(fiber: LinkNode | null) {
 
   const children = fiber.props.children
   let preChild: LinkNode | null = null
-  children.forEach((child: VDom, index: number) => {
-    const newFieber = {
-      dom: null,
-      type: child.type,
-      props: child.props,
-      child: null,
-      sibling: null,
-      parent: fiber,
-    }
+  children.forEach((child: VDom | FunctionComponent, index: number) => {
+    const newFiber: LinkNode = initChidren(child, fiber)
 
     if (index === 0) {
-      fiber.child = newFieber
+      fiber.child = newFiber
     }
     else if (index === 1 && preChild) {
-      preChild.sibling = newFieber
+      preChild.sibling = newFiber
     }
 
-    preChild = newFieber
+    preChild = newFiber
   })
 
   // 返回下一个执行的fieber

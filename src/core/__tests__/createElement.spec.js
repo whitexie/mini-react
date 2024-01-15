@@ -1,9 +1,9 @@
-import React from '../core/React'
+import React from '../React'
 import { it, describe, expect } from 'vitest'
 
 describe('createElement', () => {
   it('props 为空时', () => {
-    const dom = React.createElement('div', null)
+    const dom = React.createElement('div', {})
 
     expect(dom).toMatchInlineSnapshot(`
       {
