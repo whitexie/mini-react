@@ -11,28 +11,26 @@ export interface VDom {
 
 type FunctionComponent = () => VDom
 
+type EffectTagType = 'update' | 'placement'
+
 interface LinkNode extends VDom {
   dom: null | HTMLElement | Text
   child: LinkNode | null
   sibling: LinkNode | null
   parent: LinkNode | null
+  effectTag: EffectTagType
+  alternate?: LinkNode | null
 }
 
 let nextWorkOfUnit: LinkNode | null = null;
+let currentNode: LinkNode | null = null
 let rootNode: LinkNode | null = null;
 
 function createDom(el: VDom): HTMLElement | Text {
   if (el.type === 'TEXT_ELEMENT') {
     return document.createTextNode(el.props.nodeValue)
   }
-
   const dom = document.createElement(el.type as HTMLTagName)
-  const props = el.props
-  Object.keys(props).forEach(key => {
-    if (key !== 'children') {
-      dom[key] = props[key]
-    }
-  })
 
   return dom
 }
@@ -61,17 +59,28 @@ function createTextNode(text: string) {
   }
 }
 
-function createLinkNode(vdom: VDom, parent: LinkNode): LinkNode {
-  const node: LinkNode = { dom: null, sibling: null, child: null, ...vdom, parent }
+function createLinkNode(vdom: VDom, parent: LinkNode, option: Partial<LinkNode>): LinkNode {
+  const node: LinkNode = { dom: null, sibling: null, child: null, ...vdom, parent, effectTag: 'placement' }
+  Object.keys(option).forEach(key => {
+    node[key] = option[key]
+  })
 
   return node
 }
 
 export function initChidren(fiber: LinkNode, children: VDom[]) {
-
+  let oldFiber = fiber.alternate?.child
   let preChild: LinkNode | null = null;
   children.forEach((child, index) => {
-    const newFiber = createLinkNode(child, fiber)
+    const isSameType = oldFiber && oldFiber.type === child.type
+
+    const option: Partial<LinkNode> = {
+      effectTag: isSameType ? 'update' : 'placement',
+      dom: isSameType ? oldFiber?.dom : null,
+      alternate: isSameType ? oldFiber : undefined
+    }
+
+    const newFiber = createLinkNode(child, fiber, option)
 
     if (index === 0) {
       fiber.child = newFiber
@@ -80,9 +89,33 @@ export function initChidren(fiber: LinkNode, children: VDom[]) {
       preChild.sibling = newFiber
     }
 
+    if (oldFiber) {
+      oldFiber = oldFiber.sibling
+    }
+
     preChild = newFiber
+    oldFiber
   })
 
+}
+
+function updateProps(dom: HTMLElement | Text, nextProps: Omit<Props, 'children'>, prevProps: Omit<Props, 'children'>) {
+  Object.keys(prevProps).forEach((key) => {
+    if (!(key in nextProps)) {
+      (dom as HTMLElement).removeAttribute(key)
+    }
+  })
+  Object.keys(nextProps).forEach(key => {
+    if (key.startsWith('on')) {
+      const event = key.slice(2).toLowerCase();
+      const func = nextProps[key]
+      dom.removeEventListener(event, prevProps[key])
+      dom.addEventListener(event, func)
+    }
+    else if (key !== 'children') {
+      dom[key] = nextProps[key]
+    }
+  })
 }
 
 function performUnitOfWork(fiber: LinkNode | null) {
@@ -93,6 +126,7 @@ function performUnitOfWork(fiber: LinkNode | null) {
   const isFunctionComponent = typeof fiber.type === 'function'
   if (!isFunctionComponent && !fiber.dom) {
     fiber.dom = createDom(fiber)
+    updateProps(fiber.dom, fiber.props, {})
   }
 
   let children = fiber.props.children
@@ -126,14 +160,20 @@ function performUnitOfWork(fiber: LinkNode | null) {
 
 
 function commitNode(fiber: LinkNode) {
-  if(!fiber) return
+  if (!fiber) return
 
   if (fiber.dom && fiber.parent) {
     let parent = fiber.parent
     while (!parent.dom && parent.parent) {
       parent = parent.parent
     }
-    (parent.dom as HTMLElement).append(fiber.dom)
+
+    if (fiber.effectTag === 'update') {
+      updateProps(fiber.dom, fiber.props, fiber.alternate?.props || {});
+    }
+    else if (fiber.effectTag === 'placement') {
+      (parent.dom as HTMLElement).append(fiber.dom)
+    }
   }
 
   if (fiber.child) {
@@ -147,6 +187,14 @@ function commitNode(fiber: LinkNode) {
   commitNode(parent.sibling as LinkNode)
 }
 
+function commitRoot() {
+  if (rootNode) {
+    commitNode(rootNode)
+    currentNode = rootNode
+    rootNode = null
+  }
+}
+
 const workLoop: IdleRequestCallback = (deadline) => {
   let shouldYield = false;
 
@@ -156,7 +204,7 @@ const workLoop: IdleRequestCallback = (deadline) => {
   }
 
   if (!nextWorkOfUnit && rootNode) {
-    commitNode(rootNode)
+    commitRoot()
   }
   requestIdleCallback(workLoop)
 }
@@ -168,6 +216,7 @@ function render(el: VDom, container: HTMLElement) {
     sibling: null,
     child: null,
     dom: container,
+    effectTag: 'placement',
     props: {
       children: [el]
     }
@@ -179,7 +228,29 @@ function render(el: VDom, container: HTMLElement) {
 
 }
 
+function update() {
+  if (currentNode) {
+
+    rootNode = {
+      type: 'div',
+      parent: null,
+      sibling: null,
+      child: null,
+      dom: currentNode.dom,
+      props: currentNode.props,
+      effectTag: 'update',
+      alternate: currentNode,
+    }
+
+    nextWorkOfUnit = rootNode
+  }
+
+  requestIdleCallback(workLoop)
+
+}
+
 export default {
+  update,
   createElement,
   render
 }

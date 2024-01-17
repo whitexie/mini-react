@@ -3,8 +3,24 @@ import React from "./core/React.ts";
 // const App = React.createElement("div", { id: "app" }, "hhhhh", { type: "a", props: { id: "a", children: ["123456"] } });
 
 // const App = <div>hi,mini-react</div>;
+
+let count = 0;
+let props: any = { id: "sss" };
 function Counter({ num }) {
-  return <p>Counter {num}</p>;
+  function onClick(e) {
+    count++;
+    console.log("e ", e, num);
+    props = {};
+    React.update();
+  }
+
+  return (
+    <div>
+      Counter {num}
+      <h3 {...props}>{count}</h3>
+      <button onClick={onClick}>click me</button>
+    </div>
+  );
 }
 
 function App() {
@@ -12,7 +28,6 @@ function App() {
     <div>
       hi,mini-react
       <Counter num={321} />
-      <Counter num={123} />
     </div>
   );
 }
